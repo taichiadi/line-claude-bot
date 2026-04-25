@@ -60,22 +60,25 @@ def handle_message(event):
     if len(conversation_history[chat_id]) > 20:
         conversation_history[chat_id] = conversation_history[chat_id][-20:]
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1000,
-        system=SYSTEM_PROMPT,
-        messages=conversation_history[chat_id]
-    )
-
-    ai_reply = response.content[0].text
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1000,
+            system=SYSTEM_PROMPT,
+            messages=conversation_history[chat_id]
+        )
+        ai_reply = response.content[0].text
+    except Exception as e:
+        print(f"Claude APIエラー: {e}")
+        ai_reply = f"エラーが発生しました: {e}"
 
     conversation_history[chat_id].append({
         "role": "assistant",
         "content": ai_reply
     })
 
-    requests.post(
+    result = requests.post(
         "https://api.line.me/v2/bot/message/reply",
         headers={
             "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
@@ -86,6 +89,7 @@ def handle_message(event):
             "messages": [{"type": "text", "text": ai_reply}]
         }
     )
+    print(f"LINE返信結果: {result.status_code} {result.text}")
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from flask import Flask, request, abort
 import anthropic
 import requests
 from supabase import create_client
+from tavily import TavilyClient
 
 app = Flask(__name__)
 
@@ -14,14 +15,22 @@ LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+tavily = TavilyClient(api_key=TAVILY_API_KEY)
 
 SYSTEM_PROMPT = """あなたは事業アイデアの壁打ち相手として参加しているAIアシスタントです。
 2人の起業家がLINEグループで事業について議論しており、あなたはその議論に参加しています。
 建設的なフィードバック、鋭い質問、市場分析、リスク指摘などを行いながら、
 事業アイデアをより良くする手助けをしてください。
-日本語で回答してください。回答は簡潔にまとめてください。"""
+日本語で回答してください。回答は簡潔にまとめてください。
+メッセージに「調べて」「検索して」「市場」「最新」などのキーワードがあればウェブ検索を行います。"""
+
+
+def should_search(message):
+    keywords = ["調べて", "検索して", "市場", "最新", "トレンド", "データ", "統計", "規模"]
+    return any(kw in message for kw in keywords)
 
 
 @app.route("/")
@@ -75,8 +84,21 @@ def handle_message(event):
     user_message = event["message"]["text"]
     chat_id = event["source"].get("groupId") or event["source"].get("userId")
 
+    search_results = ""
+    if should_search(user_message):
+        try:
+            result = tavily.search(query=user_message, max_results=3)
+            search_results = "\n\n【検索結果】\n"
+            for r in result.get("results", []):
+                search_results += f"- {r['title']}: {r['content'][:200]}\n"
+        except Exception as e:
+            print(f"Tavily検索エラー: {e}")
+
     save_message(chat_id, "user", user_message)
     history = get_history(chat_id)
+
+    if search_results:
+        history[-1]["content"] += search_results
 
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)

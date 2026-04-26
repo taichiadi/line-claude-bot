@@ -84,6 +84,12 @@ def handle_message(event):
     user_message = event["message"]["text"]
     chat_id = event["source"].get("groupId") or event["source"].get("userId")
 
+    if "事業相談" not in user_message and "Bot" not in user_message:
+        if event["source"]["type"] == "group":
+            return
+    user_message = user_message.replace("@事業相談Bot", "").replace("事業相談Bot", "").strip()
+
+
     search_results = ""
     if should_search(user_message):
         try:

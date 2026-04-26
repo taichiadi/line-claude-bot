@@ -2,8 +2,5 @@ flask
 anthropic
 requests
 gunicorn
-<<<<<<< HEAD
-=======
 supabase
 tavily-python
->>>>>>> b5490c61bf63ed4227c2c78e681ac5e2b0ca9763

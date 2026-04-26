@@ -103,10 +103,27 @@ def handle_message(event):
     save_message(chat_id, "user", user_message)
     history = get_history(chat_id)
 
+    # 最後のユーザーメッセージにsearch_contextを追加
     if search_context:
-        history[-1]["content"] += search_context.strip()
+        for i in range(len(history) - 1, -1, -1):
+            if history[i]["role"] == "user":
+                history[i]["content"] += search_context.strip()
+                break
 
-    clean_messages = [{"role": m["role"], "content": m["content"].strip()} for m in history]
+    # 空メッセージを除去し、同じroleが連続する場合はマージ
+    clean_messages = []
+    for msg in history:
+        content = msg["content"].strip()
+        if not content:
+            continue
+        if clean_messages and clean_messages[-1]["role"] == msg["role"]:
+            clean_messages[-1]["content"] += "\n" + content
+        else:
+            clean_messages.append({"role": msg["role"], "content": content})
+
+    # 最後がuserメッセージでない場合に補正
+    if not clean_messages or clean_messages[-1]["role"] != "user":
+        clean_messages.append({"role": "user", "content": user_message.strip()})
 
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)

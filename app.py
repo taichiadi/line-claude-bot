@@ -73,6 +73,7 @@ def save_message(chat_id, role, content):
 def handle_message(event):
     user_message = event["message"]["text"]
     source_type = event["source"]["type"]
+    print(f"DEBUG: source={source_type}, msg={user_message[:50]}")
 
     if source_type == "group":
         if BOT_NAME not in user_message:

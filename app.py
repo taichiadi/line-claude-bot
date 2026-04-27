@@ -61,10 +61,11 @@ def get_history(chat_id):
     result = supabase.table("conversations")\
         .select("role,content")\
         .eq("chat_id", chat_id)\
-        .order("created_at")\
+        .order("created_at", desc=True)\
+
         .limit(20)\
         .execute()
-    return [{"role": r["role"], "content": r["content"].strip()} for r in result.data]
+  return [{"role": r["role"], "content": r["content"].strip()} for r in reversed(result.data)]
 
 
 def save_message(chat_id, role, content):

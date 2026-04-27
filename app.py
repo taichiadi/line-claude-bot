@@ -124,8 +124,6 @@ def handle_message(event):
     # 最後がuserメッセージでない場合に補正
     if not clean_messages or clean_messages[-1]["role"] != "user":
         clean_messages.append({"role": "user", "content": user_message.strip()})
-   print(f"DEBUG messages: {[(m['role'], m['content'][:20]) for m in clean_messages]}")
-   try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         response = client.messages.create(
             model="claude-sonnet-4-6",

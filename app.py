@@ -71,36 +71,70 @@ def save_message(chat_id, role, content):
     }).execute()
 
 def handle_message(event):
-    user_message = event["message"]["text"]
-    source_type = event["source"]["type"]
-    print(f"DEBUG: source={source_type}, msg={user_message[:50]}")
+    try:
+        user_message = event["message"]["text"]
+        source_type = event["source"]["type"]
+        print(f"DEBUG: source={source_type}, msg={user_message[:50]}")
 
-    if source_type == "group":
-        if BOT_NAME not in user_message:
+        if source_type == "group":
+            if BOT_NAME not in user_message:
+                return
+            user_message = user_message.replace("@" + BOT_NAME, "").replace(BOT_NAME, "").strip()
+
+        if not user_message:
             return
-        user_message = user_message.replace("@" + BOT_NAME, "").replace(BOT_NAME, "").strip()
 
-    if not user_message:
-        return
+        reply_token = event["replyToken"]
+        chat_id = event["source"].get("groupId") or event["source"].get("userId")
+        print(f"DEBUG2: chat_id={chat_id}")
 
-    reply_token = event["replyToken"]
-    chat_id = event["source"].get("groupId") or event["source"].get("userId")
+        save_message(chat_id, "user", user_message)
+        print("DEBUG3: save_message done")
 
-    search_context = ""
-    if any(kw in user_message for kw in ["調べて", "検索", "最新", "トレンド", "市場", "競合", "データ", "統計", "規模"]):
-        try:
-            result = tavily.search(query=user_message, max_results=3)
-            search_context = "\n\n【検索結果】\n"
-            for r in result.get("results", []):
-                search_context += f"- {r['title']}: {r['content'][:200]}\n"
-        except Exception as e:
-            print(f"Tavily検索エラー: {e}")
+        history = get_history(chat_id)
+        print(f"DEBUG4: history len={len(history)}")
 
-    save_message(chat_id, "user", user_message)
-    history = get_history(chat_id)
+        clean_messages = []
+        for msg in history:
+            content = msg["content"].strip()
+            if not content:
+                continue
+            if clean_messages and clean_messages[-1]["role"] == msg["role"]:
+                clean_messages[-1]["content"] += "\n" + content
+            else:
+                clean_messages.append({"role": msg["role"], "content": content})
 
-    if search_context:
-        for i in range(len(history) - 1, -1, -1):
-            if history[i]["role"] == "user":
-                history[i]["content"] += search_context.strip()
-                break
+        if not clean_messages or clean_messages[-1]["role"] != "user":
+            clean_messages.append({"role": "user", "content": user_message.strip()})
+
+        print(f"DEBUG5: calling Claude, last role={clean_messages[-1]['role']}")
+
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1000,
+            system=SYSTEM_PROMPT,
+            messages=clean_messages
+        )
+        ai_reply = response.content[0].text.strip()
+        print(f"DEBUG6: got reply")
+
+        save_message(chat_id, "assistant", ai_reply)
+
+        result = requests.post(
+            "https://api.line.me/v2/bot/message/reply",
+            headers={
+                "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "replyToken": reply_token,
+                "messages": [{"type": "text", "text": ai_reply}]
+            }
+        )
+        print(f"LINE返信結果: {result.status_code} {result.text}")
+
+    except Exception as e:
+        import traceback
+        print(f"handle_messageエラー: {traceback.format_exc()}")
+

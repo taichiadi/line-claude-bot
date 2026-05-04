@@ -28,9 +28,11 @@ SYSTEM_PROMPT = """あなたは事業アイデアの壁打ち相手として参�
 日本語で回答してください。回答は簡潔にまとめてください。
 メッセージに「調べて」「検索して」「市場」「最新」などのキーワードがあればウェブ検索を行います。"""
 
+
 @app.route("/")
 def health():
     return "OK"
+
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -54,6 +56,7 @@ def webhook():
 
     return "OK"
 
+
 def get_history(chat_id):
     result = supabase.table("conversations")\
         .select("role,content")\
@@ -63,6 +66,7 @@ def get_history(chat_id):
         .execute()
     return [{"role": r["role"], "content": r["content"].strip()} for r in reversed(result.data)]
 
+
 def save_message(chat_id, role, content):
     supabase.table("conversations").insert({
         "chat_id": chat_id,
@@ -70,11 +74,11 @@ def save_message(chat_id, role, content):
         "content": content.strip()
     }).execute()
 
+
 def handle_message(event):
     try:
         user_message = event["message"]["text"]
         source_type = event["source"]["type"]
-        print(f"DEBUG: source={source_type}, msg={user_message[:50]}")
 
         if source_type == "group":
             if BOT_NAME not in user_message:
@@ -86,13 +90,9 @@ def handle_message(event):
 
         reply_token = event["replyToken"]
         chat_id = event["source"].get("groupId") or event["source"].get("userId")
-        print(f"DEBUG2: chat_id={chat_id}")
 
         save_message(chat_id, "user", user_message)
-        print("DEBUG3: save_message done")
-
         history = get_history(chat_id)
-        print(f"DEBUG4: history len={len(history)}")
 
         clean_messages = []
         for msg in history:
@@ -107,8 +107,6 @@ def handle_message(event):
         if not clean_messages or clean_messages[-1]["role"] != "user":
             clean_messages.append({"role": "user", "content": user_message.strip()})
 
-        print(f"DEBUG5: calling Claude, last role={clean_messages[-1]['role']}")
-
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         response = client.messages.create(
             model="claude-sonnet-4-6",
@@ -117,7 +115,6 @@ def handle_message(event):
             messages=clean_messages
         )
         ai_reply = response.content[0].text.strip()
-        print(f"DEBUG6: got reply")
 
         save_message(chat_id, "assistant", ai_reply)
 
@@ -138,3 +135,7 @@ def handle_message(event):
         import traceback
         print(f"handle_messageエラー: {traceback.format_exc()}")
 
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)

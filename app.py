@@ -17,6 +17,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
 BOT_NAME = "事業相談Bot"
+SEARCH_KEYWORDS = ["調べて", "検索", "最新", "トレンド", "市場", "競合", "データ", "統計", "規模"]
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 tavily = TavilyClient(api_key=TAVILY_API_KEY)
@@ -91,8 +92,24 @@ def handle_message(event):
         reply_token = event["replyToken"]
         chat_id = event["source"].get("groupId") or event["source"].get("userId")
 
+        search_context = ""
+        if any(kw in user_message for kw in SEARCH_KEYWORDS):
+            try:
+                result = tavily.search(query=user_message, max_results=3)
+                search_context = "\n\n【検索結果】\n"
+                for r in result.get("results", []):
+                    search_context += f"- {r['title']}: {r['content'][:200]}\n"
+            except Exception as e:
+                print(f"Tavily検索エラー: {e}")
+
         save_message(chat_id, "user", user_message)
         history = get_history(chat_id)
+
+        if search_context:
+            for i in range(len(history) - 1, -1, -1):
+                if history[i]["role"] == "user":
+                    history[i]["content"] += search_context.strip()
+                    break
 
         clean_messages = []
         for msg in history:
